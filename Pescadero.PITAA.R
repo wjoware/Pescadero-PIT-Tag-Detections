@@ -9,6 +9,7 @@
   library(purrr)
   library(data.table)
   library(lubridate)
+  library(boot)
   library(ggplot2)
   library(ggpubr)
   library(grid)
@@ -384,7 +385,7 @@
                                       "DetMonth", "Antenna"))
             # Result: all observations merged & the 4 duplicates from dat25 were not repeated
             
-# Compile CDFW seine records & PIT detection records with more NOAA records
+# Import additional NOAA records --------------------------------------------------------------
             
   # Step 1: import dataframe for NOAA 2022 electrofishing records in Pescadero Creek watershed
     noaa.efish <- read.csv("Copy of Pescadero Dbase Records electrofishing 2022.csv")
@@ -392,12 +393,12 @@
     noaa.efish <- noaa.efish[, -1]
     noaa.efish <- noaa.efish %>% rename("ID" = "PITNum")
     
-  # Step 2: import dataframe for NOAA coho broodstock release records in
-    # Pescadero Creek watershed
-    noaa.release <- read.csv("Copy of W2122_Pescadero_Adult_RLS_Complete.csv")
-    noaa.release$PITNum <- format(noaa.release$PITNum, scientific = F)
-    noaa.release <- noaa.release[, -1]
-    noaa.release <- noaa.release %>% rename("ID" = "PITNum")
+  # Step 2: import dataframe for NOAA coho releases into Pescadero Creek watershed
+    # (records redundant with "noaa.PISCES" records for releases ("RlS") under "Event")
+      # noaa.release <- read.csv("Copy of W2122_Pescadero_Adult_RLS_Complete.csv")
+      # noaa.release$PITNum <- format(noaa.release$PITNum, scientific = F)
+      # noaa.release <- noaa.release[, -1]
+      # noaa.release <- noaa.release %>% rename("ID" = "PITNum")
     
   # Step 3: import dataframe for NOAA observations of mortalities (MOR), 
     # releases (RLS), & tagging (TAG) events in Pescadero Creek watershed
@@ -407,108 +408,99 @@
     noaa.PISCES <- noaa.PISCES %>% rename("ID" = "PITNum")
     noaa.PISCES <- noaa.PISCES %>% rename("EventDate" = "Date")
     
-  # Step 4: join dataframes
-    # 4a. merge Butano Creek detections & NOAA PISCES records
-      dat32$ID %in% noaa.PISCES$ID 
-        # check if PIT IDs from Butano Creek detections were observed by other NOAA sampling
-      shared <- dplyr::inner_join(dat32, noaa.PISCES, by = "ID")
-        # select PIT IDs from both dataframes
-      shared2 <- shared[-c(6:17,23:24,30)]
-        # remove columns with no values
-      unshared <- dplyr::anti_join(dat32, noaa.PISCES, by = "ID")
-        # select PIT IDs from Butano Creek detections that were not observed by other NOAA sampling
-      But.records <- rbind(shared2, unshared)
-        # combine records from both dataframes
-      
-    # 4b. combine duplicate columns in merged dataframe
-      col.comb <- c("Watershed", "Watershed.y")
-      col.comb2 <- c("LifeStage", "LifeStage.y")
-      col.comb3 <- c("Species", "Species.x", "Species.y")
-      col.comb4 <- c("Site", "Site.y")
-      col.comb5 <- c("Origin.x", "Origin.y")
-      
-      # 
-      But.records2 <- But.records %>%                                          
-        dplyr::mutate(Watershed = invoke(coalesce, across(all_of(col.comb)))) %>%
-        dplyr::select(Watershed, colnames(But.records)[! colnames(But.records) %in% col.comb])                                          
-       
-      But.records3 <- But.records2 %>%  
-        dplyr::mutate(Lifestage = invoke(coalesce, across(all_of(col.comb2)))) %>%
-        dplyr::select(Lifestage, colnames(But.records2)[! colnames(But.records2) %in% col.comb2])
-      
-      But.records4 <- But.records3 %>%  
-        dplyr::mutate(Species = invoke(coalesce, across(all_of(col.comb3)))) %>%
-        dplyr::select(Species, colnames(But.records3)[! colnames(But.records3) %in% col.comb3])
-      
-      But.records5 <- But.records4 %>%  
-        dplyr::mutate(Site = invoke(coalesce, across(all_of(col.comb4)))) %>%
-        dplyr::select(Site, colnames(But.records4)[! colnames(But.records4) %in% col.comb4])
-      
-      But.records6 <- But.records5 %>%  
-        dplyr::mutate(Origin = invoke(coalesce, across(all_of(col.comb5)))) %>%
-        dplyr::select(Origin, colnames(But.records5)[! colnames(But.records5) %in% col.comb5])
-      
-    #
-      But.records6$Species <- str_replace_all(But.records6$Species, 'onmy', 'Onmy')
-      But.records6$Species <- But.records6$Species %>% mutate_all(na_if, "")
-    
-    # a. compile all prior dataframes
-      comp <- purrr::reduce(
-            list(dat18, # Pescadero Creek records; duplicates & physical test tags filtered
-                 dat31, # Butano Creek records; duplicates & physical test tags filtered
-                 noaa.efish, 
-                 noaa.release, 
-                 noaa.PISCES),
-            function(left, right) {
-              dplyr::full_join(left, right, by = "ID")
-            }
-            )
+# Compile PIT ID for detected fish observed across projects by creek --------
   
-      # Note: 159 common rows between "noaa.PISCES" & "noaa.release"
-        # no common rows between these datafranes & "noaa.efish"
-        # (determined by separate compilations)
- 
-  # b. compile variables with duplicate names into shared columns
-      # 1. Antenna
-        cv1 <-
-          comp %>%
-          mutate(Antenna = coalesce(Antenna.x, Antenna.y)) %>%
-          select(ID, Antenna)
- 
-      # 2. Time
-        cv2 <-
-          comp %>%
-          mutate(Time = coalesce(Time.x, Time.y)) %>%
-          select(ID, Time)
- 
-      # DetDate
-        cv3 <-
-          comp %>%
-          mutate(DetDate = coalesce(DetDate.x, DetDate.y)) %>%
-          select(ID, DetDate)
+  # I. Butano Creek
+      
+      # 1a. merge PIT IDs from BioLogic & NOAA PISCES records
+        dat32$ID %in% noaa.PISCES$ID
+          # dat32 IDs in PISCES tagging, mortality, & release records
+        Bs.a <- dplyr::inner_join(dat32, noaa.PISCES, by = "ID")
+          # select PIT IDs shared in both dataframes
+        Bs.a2 <- shared[-c(6:17,23:24,30)]
+          # remove columns with no values
+        Bu.a <- dplyr::anti_join(dat32, noaa.PISCES, by = "ID")
+          # select PIT IDs from BioLogic & NOAA PIT detections on Butano Creek
+            # that were not observed by other NOAA sampling
         
-      # DetMonth
-        cv4 <-
-          comp %>%
-          mutate(DetMonth = coalesce(DetMonth.x, DetMonth.y)) %>%
-          select(ID, DetMonth)
+      # 1b. merge PIT IDs from BioLogic & NOAA electrofishing records
+        dat32$ID %in% noaa.efish$ID 
+          # dat32 IDs in NOAA electrofishing records
+        Bs.b <- dplyr::inner_join(dat32, noaa.efish, by = "ID")
+          # select PIT IDs shared in both dataframes
+        Bs.b %>% keep(~all(is.na(.x))) %>% names
+          # select columns with no data (NAs)
+        Bs.b2 <- Bs.b[ , !names(Bs.b) %in% 
+                         c("Species.x", "SampDate", "FL", "Origin.x", "Reach",
+                           "Site.x", "Marked", "LifeStage.x", "Species.y",
+                           "Origin.y", "Watershed.x", "Notes")]
+                          # remove columns with no values
+        Bu.b <- dplyr::anti_join(dat32, noaa.efish, by = "ID")
+          # select PIT IDs from BioLogic & NOAA PIT detections on Butano Creek
+            # that were not observed by NOAA electrofishing
         
-      # Species
-        cv5 <-
-          comp %>%
-          mutate(Species = coalesce(Species.x, Species.y)) %>%
-          select(ID, Species)
-        
-      # LifeStage
-        cv6 <-
-          comp %>%
-          mutate(LifeStage = coalesce(LifeStage.x, LifeStage.y)) %>%
-          select(ID, LifeStage)
-        
-  # c. remove columns with duplicate names from "comp"
-       comp2 <- comp[-c(2:6,13:18)] 
-       
-       comp3 <- dplyr::bind_cols(comp2, cv1, cv2, cv3, cv4, cv5, cv6, by = "ID")
+      # 1c. join Butano records together
+        B.dat <- rbind(Bs.a2, Bu.a, Bs.b2, Bu.b)
+          # combine shared & unshared records from Butano Creek
+      
+      # 1d. combine duplicate B.dat columns together
+        # vector for each variable that requires compiling
+          col.comb <- c("Watershed", "Watershed.y")
+          col.comb2 <- c("LifeStage", "LifeStage.y")
+          col.comb3 <- c("Species", "Species.x", "Species.y")
+          col.comb4 <- c("Site", "Site.y")
+          col.comb5 <- c("Origin.x", "Origin.y")
+      
+        # compile variables
+          # Watershed
+            B.dat2 <- B.dat %>%                                          
+              dplyr::mutate(Watershed = 
+                              invoke(coalesce, across(all_of(col.comb)))) %>%
+              dplyr::select(Watershed, 
+                            colnames(B.dat)[! colnames(B.dat) %in% col.comb])                                          
+          # Life stage
+            B.dat3 <- B.dat2 %>%  
+              dplyr::mutate(Lifestage = 
+                              invoke(coalesce, across(all_of(col.comb2)))) %>%
+              dplyr::select(Lifestage, 
+                            colnames(B.dat2)[! colnames(B.dat2) %in% col.comb2])
+      
+          # Species
+            B.dat4 <- B.dat3 %>%  
+              dplyr::mutate(Species = 
+                              invoke(coalesce, across(all_of(col.comb3)))) %>%
+              dplyr::select(Species, 
+                            colnames(B.dat3)[! colnames(B.dat3) %in% col.comb3])
+      
+          # Site
+            B.dat5 <- B.dat4 %>%  
+              dplyr::mutate(Site = 
+                              invoke(coalesce, across(all_of(col.comb4)))) %>%
+              dplyr::select(Site, colnames(B.dat4)[! colnames(B.dat4) %in% col.comb4])
+      
+          # Origin
+            B.dat6 <- B.dat5 %>%  
+              dplyr::mutate(Origin = 
+                              invoke(coalesce, across(all_of(col.comb5)))) %>%
+              dplyr::select(Origin, colnames(B.dat5)[! colnames(B.dat5) %in% col.comb5])
+      
+        # Change O. mykiss species code to align with other dataframes
+          B.dat6$Species <- str_replace_all(B.dat6$Species, 'onmy', 'Onmy')
+    
+        # Change detection month to factorial variable
+          B.dat6$DetMonth <- factor(B.dat6$DetMonth, 
+                                      levels = c("12/2021", "05/2022", "08/2022", 
+                                                 "10/2022", "11/2022", "12/2022", 
+                                                 "01/2023", "02/2023", "03/2023",
+                                                 "04/2023", "05/2023", "06/2023", 
+                                                 "07/2023"))
+    
+ # II. Pescadero Creek
+      
+      # 1a.   
+      dat18$ID %in% noaa.PISCES$ID
+      shared3 <- dplyr::inner_join(dat18, noaa.PISCES, by = "ID") 
+      unshared3 <- dplyr::anti_join(dat18, noaa.PISCES, by = "ID")
           
 # --------------------------------------------------------------------------------------
 # Visualize data 
@@ -595,7 +587,8 @@
     # a: separate data by field season
     
       # 2021 - 2022 field season
-        B.21 <- dplyr::filter(But.records6, DetMonth < "12/2022")
+        B.21 <- B.dat6 %>% filter(DetMonth %in%  
+                                         c("12/2021", "05/2022", "08/2022"))
         
         # replace "NA" & blank values for species with "onmy"
           # "NA" values
@@ -607,19 +600,21 @@
       
       # set month as a factorial variable
         B.21$DetMonth <- factor(B.21$DetMonth, 
-                              levels = c("12/2021", "01/2022", "02/2022", "03/2022", 
-                                         "04/2022", "05/2022", "06/2022", "07/2022", 
-                                         "08/2022", "09/2022", "10/2022","11/2022"))
+                              levels = c("10/2021", "11/2021", "12/2021", "01/2022", 
+                                         "02/2022", "03/2022", "04/2022", "05/2022", 
+                                         "06/2022", "07/2022", "08/2022","09/2022"))
       # 2022 - 2023 field season
-        B.22 <- But.records6 %>% filter(DetMonth %in% 
-                                          c("12/2022", "01/2023", "02/2023", 
-                                            "03/2023", "04/2023", "05/2023", 
-                                            "06/2023", "07/2023"))
+        B.22 <- B.dat6 %>% filter(DetMonth %in% 
+                                          c("10/2022", "11/2022", "12/2022", 
+                                            "01/2023", "02/2023", "03/2023", 
+                                            "04/2023", "05/2023", "06/2023", 
+                                            "07/2023"))
         # set month as a factorial variable
           B.22$DetMonth <- factor(B.22$DetMonth, 
-                              levels = c("12/2022", "01/2023", "02/2023", 
-                                         "03/2023", "04/2023", "05/2023", 
-                                         "06/2023", "07/2023", "08/2023"))
+                              levels = c("10/2022", "11/2022", "12/2022", 
+                                         "01/2023", "02/2023", "03/2023", 
+                                         "04/2023", "05/2023", "06/2023", 
+                                         "07/2023", "08/2023", "09/2023"))
           
         # replace "NA" values for species with "onmy"
           B.22$Species <- B.22$Species %>% replace(is.na(.), "Onmy")
@@ -628,73 +623,124 @@
   # plot Butano Creek results
         
     # y-axis limit
-      y4 = c(0, 2)      
+      y4 = c(0, 40)      
         
     # 2021 field season
       p4 <- ggplot(B.21, aes(x = DetMonth, fill = Species), y = ID) +
-        geom_bar(stat = "count", color = "black", show.legend = F) +
-        scale_fill_manual(values = c("khaki", "deepskyblue", "deepskyblue")) +
+        geom_bar(stat  = "count", 
+                 position = position_dodge(width = 0.5), width = 0.5, 
+                 color = "black") +
+        scale_fill_manual(values = c("white", "black"),
+                          name = "Species", 
+                          labels = c("Coho Salmon", "O. mykiss")) +
         theme_classic() +
-        labs(title = "Butano Creek - Pescadero Creek Road Site (2021 - 2022 field season)",
-             subtitle = "12 unique PIT tag detections from Dec. 14th, 2021 - Nov. 5th, 2022",
-             x = "Sampling month",
+        theme(legend.position = c(0.95,0.95)) +
+        labs(title = "Butano Creek (2021 Water Year)",
+             subtitle = "18 total PIT tag detections",
+             x = "Month",
              y = "Detections") +
-        ylim(y4) +
-        scale_x_discrete(breaks = c("12/2021", "01/2022", "02/2022", "03/2022", 
+        scale_x_discrete(breaks = c("10/2021", "11/2021", "12/2021", "01/2022", "02/2022", "03/2022", 
                          "04/2022", "05/2022", "06/2022", "07/2022", 
                          "08/2022", "09/2022", "10/2022","11/2022"),
-                         labels = c("12/21", "01/22", "02/22", "03/22", 
+                         labels = c("10/21", "11/21", "12/21", "01/22", "02/22", "03/22", 
                                     "04/22", "05/22", "06/22", "07/22", 
                                     "08/22", "09/22", "10/22","11/22"),
-                         drop = F)
+                         drop = F) +
+        scale_y_continuous(expand = expansion(mult = 0, add = 0), limits = y4)
       p4
       
       # y-axis limit
-        y5 = c(0, 50) 
+        y5 = c(0, 80) 
       
     # 2022 field season
       p5 <- ggplot(B.22, aes(x = DetMonth, fill = Species), y = ID) +
-        geom_bar(stat = "count", color = "black", show.legend = F, na.rm = F) +
-        scale_fill_manual(values = c("khaki", "deepskyblue")) +
+        geom_bar(stat = "count", position = position_dodge(width = 0.5), width = 0.5, 
+                 color = "black", na.rm = F) +
+        scale_fill_manual(values = c("white", "black"), 
+                          name = "Species", 
+                          labels = c("Coho Salmon", "O. mykiss")) +
         theme_classic() +
-        labs(title = "Butano Creek - Cloverdale Road Bridge Site (2022 - 2023 field season)",
-             subtitle = "169 unique PIT tag detections from Dec. 9th, 2022 - July 9th, 2023",
-             x = "Sampling month",
+        theme(legend.position = c(0.95,0.95)) +
+        labs(title = "Butano Creek (2022 Water Year)",
+             subtitle = "344 total PIT tag detections",
+             x = "Month",
              y = "Detections") +
-        ylim(y5) +
-        scale_x_discrete(breaks = c("12/2022", "01/2023", "02/2023", 
-                                    "03/2023", "04/2023", "05/2023", 
-                                    "06/2023", "07/2023", "08/2023"),
-                         labels = c("12/22", "01/23", "02/23", "03/23", "04/23", 
-                                    "05/23", "06/23", "07/23", "08/23"),
-                         drop = F)
+        scale_x_discrete(breaks = c("10/2022", "11/2022", "12/2022", "01/2023", 
+                                    "02/2023", "03/2023", "04/2023", "05/2023", 
+                                    "06/2023", "07/2023", "08/2023", "09/2023"),
+                         labels = c("10/22", "11/22", "12/22", "01/23", "02/23", 
+                                    "03/23", "04/23",  "05/23", "06/23", "07/23", 
+                                    "08/23", "09/23"),
+                         drop = F) +
+        scale_y_continuous(expand = expansion(mult = 0, add = 0), limits = y5)
       p5
       
     # combine Butano Creek detection plots
       # plot in one window
-        p6 <- ggarrange(p4,p5)
+        # p6 <- ggarrange(p4,p5)
       # common title & axes title names
-        annotate_figure(p6, top = textGrob("", gp = gpar(cex = 2)),
-                        left = textGrob("", rot = 90, gp = gpar(cex = 1)),
-                        bottom = textGrob("Sampling month", gp = gpar(cex = 1)))
+        # annotate_figure(p6, top = textGrob("", gp = gpar(cex = 2)),
+            # left = textGrob("", rot = 90, gp = gpar(cex = 1)),
+            # bottom = textGrob("Sampling month", gp = gpar(cex = 1)))
         
 # plot life stages by sampling month for lagoon seines
     # select steelhead from Pescadero detections
-      dat32 <- filter(dat5, Species == "onmy") 
-      
-    # replace NA values for "LifeStage" variable
-      dat32$LifeStage <- dat32$LifeStage %>% replace_na("NA")
+      dat33 <- filter(dat5, Species == "onmy") 
       
     # edit variables for visualization
-      # order life stages
-        dat32$LifeStage <- as.factor(dat32$LifeStage)
-        str(dat32$LifeStage) # worked
+      # order life stages for when salmonids were sampled
+        dat33$LifeStage <- as.factor(dat33$LifeStage)
+        str(dat33$LifeStage) # worked
+        
+      # rename "LifeStage"  
+        dat33 <- dat33 %>% rename("SampLifeStage" = "LifeStage")
+        
+      # replace NA values for "LifeStage" variable
+        dat33$SampLifeStage <- dat33$SampLifeStage %>% replace_na("Parr")
+        # CDFW district biologist said "Parr" is likely life stage
       
-      # create new variable for months when fish were tagged
-        dat32$SampMonth <- format(dat32$SampDate, "%m/%Y")
+      # create new variables
+        # months when fish were tagged
+          dat33$SampMonth <- format(dat33$SampDate, "%m/%Y")
+        # life stage when detected
+          dat33$DetLifeStage <- c(rep("Adult",3), #900226000295133
+                                  rep("Adult",6),
+                                  rep("Adult",4),
+                                  rep("Adult",6), #900226000899861
+                                  rep("Adult",2), #900226000899980
+                                  rep("Adult",1), #900228000479335
+                                  rep("Adult",2), #982000365411212
+                                  rep("Adult",2), #982000365411304
+                                  rep("Adult",1), #982000365411306
+                                  rep("Adult",2), #982000365411332
+                                  rep("Adult",2), #982000365411333
+                                  rep("Adult",1), #982000365411414
+                                  rep("Adult",1), #982000365411488
+                                  rep("Adult",2), #982000365411511
+                                  rep("Adult",2), #982000365411671
+                                  rep("Adult",3), #982126057446191
+                                  rep("Smolt",4), #982126057446348
+                                  rep("Smolt",12), #982126057446366
+                                  rep("Unknown",2), #982126057446377
+                                  rep("Adult",4), #982126057446381
+                                  rep("Adult",2), #982126057446441
+                                  rep("Smolt",1), #982126057448453
+                                  rep("Adult",3), #982126057448453
+                                  rep("Smolt",1), #982126057448453
+                                  rep("Adult",2), #982126057448453
+                                  rep("Adult",2), #982126057448545
+                                  rep("Adult",4), #982126057448585
+                                  rep("Adult",3), #982126057448604
+                                  rep("Adult",1), #982126057448633
+                                  rep("Smolt",2), #982126057448680
+                                  rep("Adult",2), #982126057448689
+                                  rep("Adult",5), #982126057448705
+                                  rep("Adult",2), #982126057448736
+                                  rep("Parr",2), #982126057448749
+                                  rep("Smolt",6)) #982126057448786
         
       # order months when fish were tagged
-        dat32$SampMonth <- factor(dat32$SampMonth, 
+        dat33$SampMonth <- factor(dat33$SampMonth, 
                                       levels = c("07/2019", "08/2019", "09/2019",
                                                  "10/2019", "10/2020", "04/2022", 
                                                  "05/2022", "06/2022", "08/2022", 
@@ -702,54 +748,44 @@
                                                  "01/2023", "02/2023", "03/2023"))
         
       # order months of detections
-        dat32$DetMonth <- factor(dat32$DetMonth, 
+        dat33$DetMonth <- factor(dat33$DetMonth, 
                            levels = c("12/2021", "01/2022", "03/2022", 
                                       "04/2022", "05/2022", "06/2022",
                                       "07/2022", "08/2022", "09/2022",
                                       "10/2022", "11/2022", "12/2022",
                                       "01/2023", "02/2023", "03/2023"))
-        
-    # predict O. mykiss life stage at the time of PIT detection
-     
-      # split testing & training dataframe
-          sample <- sample(c(TRUE, FALSE), nrow(dat32), replace = T, prob=c(0.8, 0.2))
-        # training dataframe
-          train  <- dat32[sample, ]
-        # testing dataframe
-          test   <- dat32[!sample, ]
-          
-         
     
     # show results
       # steelhead life stage by lagoon seine sampling month
-        p7 <- ggplot(dat32, aes(x = SampMonth, fill = LifeStage), y = ID) + 
-           geom_bar(stat = "count", color = "black") +
-           scale_fill_manual(values = c("cadetblue1", "cornflowerblue", "deepskyblue4", "darkblue"),
-                          name = "Life stage",
-                          labels = c("unknown", "parr", "smolt", "adult")) +
+        p7 <- ggplot(dat33, aes(x = SampMonth, fill = SampLifeStage), y = ID) + 
+           geom_bar(stat = "count", color = "black", show.legend = F) +
+           scale_fill_manual(values = c("#4DBBD5FF", "#8491B4FF")) +
            labs(title = "Lower Pescadero Creek Watershed",
-             subtitle = "Life stage when seined vs. PIT tagged (July 16th, 2019 - Oct. 27th, 2022)",
+             subtitle = "Life stage when PIT-tagged vs. life stage when detected",
              x = "",
              y = "Seine captures") +
            ylim(0,30) +
-           theme_classic() +
-           theme(legend.position = c(0.95,0.86))
+          theme_classic()
         
       # detections for tagged steelhead
-        p8 <- ggplot(dat32, aes(x = DetMonth), y = ID) +
-          geom_bar(stat = "count", color = "black", fill = "#0099CC") +
-          labs(title = "Pescadero Creek & Butano Creek",
-               subtitle = "PIT tag detections (Dec.17th, 2021 - Dec. 30th, 2022)",
+        p8 <- ggplot(dat33, aes(x = DetMonth, fill = DetLifeStage), y = ID) +
+          geom_bar(stat = "count", color = "black") +
+          scale_fill_manual(values = c("white", "#4DBBD5FF", "#8491B4FF", "#3C5488FF"),
+                            name = "Life stages",
+                            labels = c("unknown", "parr", "smolt", "adult")) +
+          labs(title = "Pescadero Creek",
+               subtitle = "PIT tag detections at PC1 site",
                x = "",
                y = "Detections") +
           ylim(0,30) +
+          theme(legend.position = c(0.5,1.0)) +
           theme_classic()
       # combine plots
         # plot in one window
           p9 <- ggarrange(p7,p8, ncol = 1, nrow = 2)
         # common title & axes title names
           annotate_figure(p9, 
-                        top = textGrob("*O. mykiss Captures* vs. Detections",
+                        top = textGrob("O. mykiss life stages",
                                        gp = gpar(cex = 2)),
                         bottom = textGrob("Sampling month", gp = gpar(cex = 1)))
 
@@ -1355,4 +1391,64 @@
                                     "6/10",  # week 33
                                     "06/18", # week 34
                                     "7/05")) # week 35   
+    
+# Old code to compile NOAA PISCES & NOAA electrofishing records with other data
+  # ----------------------------------------------------------------------------
+    # a. compile all prior dataframes
+    comp <- purrr::reduce(
+      list(dat18, # Pescadero Creek records; duplicates & physical test tags filtered
+           dat31, # Butano Creek records; duplicates & physical test tags filtered
+           noaa.efish, 
+           noaa.release, 
+           noaa.PISCES),
+      function(left, right) {
+        dplyr::full_join(left, right, by = "ID")
+      }
+    )
+    
+    # Note: 159 common rows between "noaa.PISCES" & "noaa.release"
+    # no common rows between these datafranes & "noaa.efish"
+    # (determined by separate compilations)
+    
+    # b. compile variables with duplicate names into shared columns
+    # 1. Antenna
+    cv1 <-
+      comp %>%
+      mutate(Antenna = coalesce(Antenna.x, Antenna.y)) %>%
+      select(ID, Antenna)
+    
+    # 2. Time
+    cv2 <-
+      comp %>%
+      mutate(Time = coalesce(Time.x, Time.y)) %>%
+      select(ID, Time)
+    
+    # DetDate
+    cv3 <-
+      comp %>%
+      mutate(DetDate = coalesce(DetDate.x, DetDate.y)) %>%
+      select(ID, DetDate)
+    
+    # DetMonth
+    cv4 <-
+      comp %>%
+      mutate(DetMonth = coalesce(DetMonth.x, DetMonth.y)) %>%
+      select(ID, DetMonth)
+    
+    # Species
+    cv5 <-
+      comp %>%
+      mutate(Species = coalesce(Species.x, Species.y)) %>%
+      select(ID, Species)
+    
+    # LifeStage
+    cv6 <-
+      comp %>%
+      mutate(LifeStage = coalesce(LifeStage.x, LifeStage.y)) %>%
+      select(ID, LifeStage)
+    
+    # c. remove columns with duplicate names from "comp"
+    comp2 <- comp[-c(2:6,13:18)] 
+    
+    comp3 <- dplyr::bind_cols(comp2, cv1, cv2, cv3, cv4, cv5, cv6, by = "ID")
     
