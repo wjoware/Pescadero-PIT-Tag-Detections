@@ -385,23 +385,10 @@
                                       "DetMonth", "Antenna"))
             # Result: all observations merged & the 4 duplicates from dat25 were not repeated
             
-# Import additional NOAA records --------------------------------------------------------------
+# Import NOAA PISCES records --------------------------------------------------------------
             
-  # Step 1: import dataframe for NOAA 2022 electrofishing records in Pescadero Creek watershed
-    noaa.efish <- read.csv("Copy of Pescadero Dbase Records electrofishing 2022.csv")
-    noaa.efish$PITNum <- format(noaa.efish$PITNum, scientific = F)
-    noaa.efish <- noaa.efish[, -1]
-    noaa.efish <- noaa.efish %>% rename("ID" = "PITNum")
-    
-  # Step 2: import dataframe for NOAA coho releases into Pescadero Creek watershed
-    # (records redundant with "noaa.PISCES" records for releases ("RlS") under "Event")
-      # noaa.release <- read.csv("Copy of W2122_Pescadero_Adult_RLS_Complete.csv")
-      # noaa.release$PITNum <- format(noaa.release$PITNum, scientific = F)
-      # noaa.release <- noaa.release[, -1]
-      # noaa.release <- noaa.release %>% rename("ID" = "PITNum")
-    
-  # Step 3: import dataframe for NOAA observations of mortalities (MOR), 
-    # releases (RLS), & tagging (TAG) events in Pescadero Creek watershed
+  # NOAA observations of mortalities (MOR), releases (RLS), & tagging (TAG) 
+    # events in Pescadero Creek watershed
     noaa.PISCES <- read.csv("Pesacdero_PISCES_PITs_20231017.csv")
     noaa.PISCES$PITNum <- format(noaa.PISCES$PITNum, scientific = F)
     noaa.PISCES <- noaa.PISCES[, -1]
@@ -415,35 +402,19 @@
       # 1a. merge PIT IDs from BioLogic & NOAA PISCES records
         dat32$ID %in% noaa.PISCES$ID
           # dat32 IDs in PISCES tagging, mortality, & release records
-        Bs.a <- dplyr::inner_join(dat32, noaa.PISCES, by = "ID")
+        Bs <- dplyr::inner_join(dat32, noaa.PISCES, by = "ID")
           # select PIT IDs shared in both dataframes
-        Bs.a2 <- shared[-c(6:17,23:24,30)]
+        Bs2 <- Bs[-c(6:17,23:24,30)]
           # remove columns with no values
-        Bu.a <- dplyr::anti_join(dat32, noaa.PISCES, by = "ID")
+        Bu <- dplyr::anti_join(dat32, noaa.PISCES, by = "ID")
           # select PIT IDs from BioLogic & NOAA PIT detections on Butano Creek
             # that were not observed by other NOAA sampling
         
-      # 1b. merge PIT IDs from BioLogic & NOAA electrofishing records
-        dat32$ID %in% noaa.efish$ID 
-          # dat32 IDs in NOAA electrofishing records
-        Bs.b <- dplyr::inner_join(dat32, noaa.efish, by = "ID")
-          # select PIT IDs shared in both dataframes
-        Bs.b %>% keep(~all(is.na(.x))) %>% names
-          # select columns with no data (NAs)
-        Bs.b2 <- Bs.b[ , !names(Bs.b) %in% 
-                         c("Species.x", "SampDate", "FL", "Origin.x", "Reach",
-                           "Site.x", "Marked", "LifeStage.x", "Species.y",
-                           "Origin.y", "Watershed.x", "Notes")]
-                          # remove columns with no values
-        Bu.b <- dplyr::anti_join(dat32, noaa.efish, by = "ID")
-          # select PIT IDs from BioLogic & NOAA PIT detections on Butano Creek
-            # that were not observed by NOAA electrofishing
-        
-      # 1c. join Butano records together
-        B.dat <- rbind(Bs.a2, Bu.a, Bs.b2, Bu.b)
+      # 1b. join Butano records together
+        B.dat <- rbind(Bs2, Bu)
           # combine shared & unshared records from Butano Creek
       
-      # 1d. combine duplicate B.dat columns together
+      # 1c. combine duplicate B.dat columns together
         # vector for each variable that requires compiling
           col.comb <- c("Watershed", "Watershed.y")
           col.comb2 <- c("LifeStage", "LifeStage.y")
@@ -451,7 +422,8 @@
           col.comb4 <- c("Site", "Site.y")
           col.comb5 <- c("Origin.x", "Origin.y")
       
-        # compile variables
+      # 1d. edit variables
+        # Compile duplicate columns
           # Watershed
             B.dat2 <- B.dat %>%                                          
               dplyr::mutate(Watershed = 
@@ -498,9 +470,97 @@
  # II. Pescadero Creek
       
       # 1a.   
-      dat18$ID %in% noaa.PISCES$ID
-      shared3 <- dplyr::inner_join(dat18, noaa.PISCES, by = "ID") 
-      unshared3 <- dplyr::anti_join(dat18, noaa.PISCES, by = "ID")
+        dat18$ID %in% noaa.PISCES$ID
+        Ps <- dplyr::inner_join(dat18, noaa.PISCES, by = "ID") 
+          # 46 PIT IDs from dat18 in PISCES
+        Ps2 <- Ps[ , !names(Ps) %in% c("Subsite", "TaggerID", "Mass_g", "X")]
+        Pu <- dplyr::anti_join(dat18, noaa.PISCES, by = "ID")
+          # 165 PIT IDs from dat18 not in PISCES
+        
+      # 1b. join dataframes
+        P.dat <- rbind(Ps2, Pu)
+        
+      # 1c. combine duplicate B.dat columns together
+        # vector for each variable that requires compiling
+          col.comb6 <- c("Antenna.x", "Antenna.y")
+          col.comb7 <- c("Species.x", "Species.y")
+          col.comb8 <- c("LifeStage.x", "LifeStage.y")
+          col.comb9 <- c("Site.x", "Site.y")
+          col.comb10 <- c("Event.x", "Event.y")
+          col.comb11 <- c("Watershed.x", "Watershed.y")
+          col.comb12 <- c("ReachID.x", "ReachID.y")
+          col.comb13 <- c("Latitude.x", "Latitude.y")
+          col.comb14 <- c("Longitude.x", "Longitude.y")
+          col.comb15 <- c("CoordinatorID.x", "CoordinatorID.y")
+          col.comb16 <- c("Organization", "Organization.x", "Organization.y")
+        
+      # 1d. edit variables
+        
+        # compile duplicate columns
+          
+          # Antenna
+            # change to character variable
+              P.dat$Antenna.x <- as.character(P.dat$Antenna.x)
+            # compile
+              P.dat2 <- P.dat %>%  
+                dplyr::mutate(Antenna = 
+                          invoke(coalesce, across(all_of(col.comb6)))) %>%
+              dplyr::select(Antenna, 
+                        colnames(P.dat)[! colnames(P.dat) %in% col.comb6])
+              
+          # Species
+              P.dat3 <- P.dat2 %>%  
+                dplyr::mutate(Species = 
+                                invoke(coalesce, across(all_of(col.comb7)))) %>%
+                dplyr::select(Species, 
+                              colnames(P.dat2)[! colnames(P.dat2) %in% col.comb7])
+        
+          # LifeStage
+              P.dat4 <- P.dat3 %>%  
+                dplyr::mutate(LifeStage = 
+                                invoke(coalesce, across(all_of(col.comb8)))) %>%
+                dplyr::select(LifeStage, 
+                              colnames(P.dat3)[! colnames(P.dat3) %in% col.comb8])
+              
+          # Site
+              P.dat5 <- P.dat4 %>%  
+                dplyr::mutate(Site = 
+                                invoke(coalesce, across(all_of(col.comb9)))) %>%
+                dplyr::select(Site, 
+                              colnames(P.dat4)[! colnames(P.dat4) %in% col.comb9])
+              
+          # Event
+              P.dat6 <- P.dat5 %>%  
+                dplyr::mutate(Event = 
+                                invoke(coalesce, across(all_of(col.comb10)))) %>%
+                dplyr::select(Site, 
+                              colnames(P.dat5)[! colnames(P.dat5) %in% col.comb10])
+              
+          # Watershed
+              P.dat7 <- P.dat6 %>%  
+                dplyr::mutate(Watershed = 
+                                invoke(coalesce, across(all_of(col.comb11)))) %>%
+                dplyr::select(Watershed, 
+                              colnames(P.dat6)[! colnames(P.dat6) %in% col.comb11])
+              
+          # ReachID
+              P.dat8 <- P.dat7 %>%  
+                dplyr::mutate(ReachID = 
+                                invoke(coalesce, across(all_of(col.comb12)))) %>%
+                dplyr::select(ReachID, 
+                              colnames(P.dat7)[! colnames(P.dat7) %in% col.comb12])
+              
+          # change detection month to factorial variable
+              P.dat8$DetMonth <- factor(P.dat8$DetMonth, 
+                                        levels = c("10/2017", "11/2017", "04/2018",
+                                                   "05/2018", "10/2019", "11/2019",
+                                                   "12/2019", "03/2021", "04/2021", 
+                                                   "05/2021", "12/2021", "01/2022", 
+                                                   "03/2022", "04/2022", "05/2022", 
+                                                   "06/2022", "07/2022", "08/2022", 
+                                                   "09/2022", "10/2022", "11/2022", 
+                                                   "12/2022", "01/2023", "02/2023", 
+                                                   "03/2023"))
           
 # --------------------------------------------------------------------------------------
 # Visualize data 
@@ -508,71 +568,89 @@
   # Step 1: Pescadero detections
         
     # a: separate by field season
-      # 2021 - 2022 field season
-        P.21 <- dat18 %>% filter(DetMonth %in% c("12/2021", "01/2022","02/2022", "03/2022",
+      # 2021 water year
+        P.21 <- P.dat8 %>% filter(DetMonth %in% c("12/2021", "01/2022","02/2022", "03/2022",
                                                  "04/2022", "05/2022", "06/2022", "07/2022",
-                                                 "08/2022", "09/2022", "10/2022", "11/2022"))
-          # replace "NA" values for species with "onmy"
-            P.21$Species <- P.21$Species %>% replace(is.na(.), "onmy")
-            # assumes all fish other than noted coho are steelhead
+                                                 "08/2022", "09/2022"))
+          # edit Species variable
+            # replace "NA" values for species with "onmy"
+              P.21$Species <- P.21$Species %>% replace(is.na(.), "Onmy")
+                # assumes all fish other than noted coho are steelhead
+            # replace "onki" with "Onki"
+              P.21$Species[P.21$Species == "onki"] <- "Onki"
             
         # set "Month" as factorial variable
         P.21$DetMonth <- factor(P.21$DetMonth, levels = 
-                               c("12/2021", "01/2022","02/2022", "03/2022", "04/2022", 
-                                 "05/2022", "06/2022", "07/2022", "08/2022", "09/2022", 
-                                 "10/2022", "11/2022"))
-        # 2022 - 2023 field season
-        P.22 <- dat18 %>% filter (DetMonth == "12/2022")
+                               c("10/2021", "11/2021", "12/2021", "01/2022",
+                                 "02/2022", "03/2022", "04/2022", "05/2022", 
+                                 "06/2022", "07/2022", "08/2022", "09/2022"))
+      # 2022 water year
+        P.22 <- P.dat8 %>% filter (DetMonth %in% c("10/2022", "11/2022", "12/2022"))
         # set "Month" as factorial variable
-        P.22$DetMonth <- factor(P.22$DetMonth, 
-                             levels = c("12/2022", "01/2023", "02/2023", "03/2023",
-                                        "04/2023", "05/2023", "06/2023", "07/2023",
-                                        "08/2023"))
+          P.22$DetMonth <- factor(P.22$DetMonth, 
+                             levels = c("10/2022", "11/2022", "12/2022", 
+                                        "01/2023", "02/2023", "03/2023",
+                                        "04/2023", "05/2023", "06/2023",
+                                        "07/2023", "08/2023", "09/2023"))
+        
+        # edit Species variable
+          # replace "NA" values for species with "onmy"
+            P.22$Species <- P.22$Species %>% replace(is.na(.), "Onmy")
             
   # b: plot results
         
       # y-axis limit
-        y1 = c(0, 50)      
+        y1 = c(0, 40)      
     
   # Pescadero Creek
     # 2021 field season
       p1 <- ggplot(P.21, aes(x = DetMonth, fill = Species), y = ID) +
-        geom_bar(stat = "count", color = "black", show.legend = F) +
-        scale_fill_manual(values = c("khaki","deepskyblue")) +
+        geom_bar(stat = "count",
+                 position = position_dodge(width = 0.5), width = 0.5,
+                 color = "black") +
+        scale_fill_manual(values = c("white", "black"),
+                          name = "Species", 
+                          labels = c("Coho Salmon", "O. mykiss")) +
         theme_classic() +
-        labs(title = "Pescadero Creek - Town Site (2021 - 2022 field season)",
-           subtitle = "158 unique PIT tag detections from Dec. 7th, 2021 - Nov. 5th, 2022",
-           x = "Sampling month",
+        labs(title = "Pescadero Creek (2021 Water Year)",
+           subtitle = "157 total PIT tag detections at PC1 Site",
+           x = "Month",
            y = "Detections") +
-        scale_x_discrete(breaks = c("12/2021", "01/2022","02/2022", "03/2022", "04/2022", 
-                                    "05/2022", "06/2022", "07/2022", "08/2022", "09/2022", 
-                                    "10/2022", "11/2022"),
-                         labels = c("12/2021", "01/2022","02/2022", "03/2022", 
-                                    "04/2022", "05/2022", "06/2022", "07/2022",
-                                    "08/2022",  "09/2022", "10/2022", "11/2022"),
+        scale_x_discrete(breaks = c("10/2021", "11/2021", "12/2021", "01/2022","02/2022", 
+                                    "03/2022", "04/2022", "05/2022", "06/2022", "07/2022", 
+                                    "08/2022", "09/2022", "10/2022", "11/2022"),
+                         labels = c("10/21", "11/21", "12/21", "01/22","02/22", 
+                                    "03/22", "04/22", "05/22", "06/22", "07/22",
+                                    "08/22",  "09/22", "10/22", "11/22"),
                          drop = F) +
-        ylim(y1)
+        theme(legend.position = c(0.95, 0.95)) +
+          # Note: order of the above line matters for legend position
+        scale_y_continuous(expand = expansion(mult = 0, add = 0), limits = y1)
       
     # 2022 field season
       # y-axis limit
         y2 = c(0, 25)      
       # set standardized plot limit
       
-      p2 <- ggplot(P.22, aes(x = DetMonth), y = ID) +
+      p2 <- ggplot(P.22, aes(x = DetMonth, fill = Species), y = ID) +
         geom_bar(stat = "count", 
-                 color = "black", fill = "deepskyblue", show.legend = F) +
+                 color = "black", 
+                 position = position_dodge(width = 0.5), width = 0.5,
+                 show.legend = F) +
+        scale_fill_manual(values = c("black","white")) +
         theme_classic() +
-        labs(title = "Pescadero Creek - Town Site (2022-23 field season)",
-             subtitle = "21 unique PIT tag detections from Dec. 3rd, 2022 - Dec. 30th, 2022",
+        labs(title = "Pescadero Creek (2022 Water Year)",
+             subtitle = "24 total PIT tag detections at PC1 Site",
              x = "Sampling month",
              y = "Detections") +
-        scale_x_discrete(breaks = c("12/2022", "01/2023", "02/2023", "03/2023", 
-                                    "04/2023", "05/2023", "06/2023", "07/2023", "08/2023"), 
-                         labels = c("12/2022", "01/2023", "02/2023", "03/2023", 
-                                    "04/2023", "05/2023", "06/2023", "07/2023", 
-                                    "08/2023"),
+        scale_x_discrete(breaks = c("10/2022", "11/2022", "12/2022", "01/2023", 
+                                    "02/2023", "03/2023", "04/2023", "05/2023", 
+                                    "06/2023", "07/2023", "08/2023", "09/2023"), 
+                         labels = c("10/22", "11/22", "12/22", "01/23", "02/23", 
+                                    "03/23", "04/23", "05/23", "06/23", "07/23", 
+                                    "08/23", "09/23"),
                          drop = F) +
-        ylim(2)
+        scale_y_continuous(expand = expansion(mult = 0, add = 0), limits = y2)
       
   # combine Pescadero Creek detection plots
     # plot in one window
@@ -585,7 +663,7 @@
   # Step 2: Plot Butano Creek detections
       
     # a: separate data by field season
-    
+    # --------------------------------
       # 2021 - 2022 field season
         B.21 <- B.dat6 %>% filter(DetMonth %in%  
                                          c("12/2021", "05/2022", "08/2022"))
@@ -620,10 +698,11 @@
           B.22$Species <- B.22$Species %>% replace(is.na(.), "Onmy")
             # assumes all fish other than noted coho are steelhead
       
-  # plot Butano Creek results
+  # plot Butano Creek results by field season
+    # ---------------------------------------
         
     # y-axis limit
-      y4 = c(0, 40)      
+      y4 = c(0, 10)      
         
     # 2021 field season
       p4 <- ggplot(B.21, aes(x = DetMonth, fill = Species), y = ID) +
@@ -636,7 +715,7 @@
         theme_classic() +
         theme(legend.position = c(0.95,0.95)) +
         labs(title = "Butano Creek (2021 Water Year)",
-             subtitle = "18 total PIT tag detections",
+             subtitle = "9 total PIT tag detections at BC1 Site",
              x = "Month",
              y = "Detections") +
         scale_x_discrete(breaks = c("10/2021", "11/2021", "12/2021", "01/2022", "02/2022", "03/2022", 
@@ -650,7 +729,7 @@
       p4
       
       # y-axis limit
-        y5 = c(0, 80) 
+        y5 = c(0, 40) 
       
     # 2022 field season
       p5 <- ggplot(B.22, aes(x = DetMonth, fill = Species), y = ID) +
@@ -662,7 +741,7 @@
         theme_classic() +
         theme(legend.position = c(0.95,0.95)) +
         labs(title = "Butano Creek (2022 Water Year)",
-             subtitle = "344 total PIT tag detections",
+             subtitle = "172 total PIT tag detections",
              x = "Month",
              y = "Detections") +
         scale_x_discrete(breaks = c("10/2022", "11/2022", "12/2022", "01/2023", 
@@ -675,13 +754,56 @@
         scale_y_continuous(expand = expansion(mult = 0, add = 0), limits = y5)
       p5
       
-    # combine Butano Creek detection plots
-      # plot in one window
-        # p6 <- ggarrange(p4,p5)
-      # common title & axes title names
-        # annotate_figure(p6, top = textGrob("", gp = gpar(cex = 2)),
-            # left = textGrob("", rot = 90, gp = gpar(cex = 1)),
-            # bottom = textGrob("Sampling month", gp = gpar(cex = 1)))
+  # plot O. mykiss detected in Butano Creek by life stage
+    # ---------------------------------------------------
+    
+    # select O. mykiss detected in 2021 water year
+      B.onmy.21 <- B.21 %>% filter(Species == "Onmy")
+      
+    # select O. mykiss detected in 2022 water year
+      B.onmy.22 <- B.22 %>% filter(Species == "Onmy")
+      
+    # edit variable for life stages
+      # replace "unknown" with "Parr" for life stage
+        B.onmy.22$Lifestage[B.onmy.22$Lifestage == c("Juvenile")] <- "Parr"
+          # fish were tagged in October 2022 & the lagoon was closed
+        B.onmy.22$Lifestage <- B.onmy.22$Lifestage %>% replace(is.na(.), "Unknown")
+      # rename variable
+        B.onmy.22 <- B.onmy.22 %>% rename("SampLifestage" = "Lifestage")
+      
+    # create variable for life stage at detection
+        B.onmy.22$DetLifestage <- c(rep("Parr", 108), rep("Unknown", 2), 
+                                    "Smolt", rep("Parr", 4), rep("Unknown", 3))
+     
+    # y-axis limit
+      y6 = c(0,40)
+      
+    # plot data
+      p6 <- ggplot(B.onmy.22, aes(x = DetMonth, fill = SampLifestage), y = unique(ID)) +
+        geom_bar(stat  = "count",
+                 color = "black",
+                 width = 0.5) +
+        theme_classic() +
+        theme(legend.position = c(0.95,0.95)) +
+        mdthemes::md_theme_classic() +
+        labs(title = "Butano Creek (2022 Water Year)",
+             subtitle = "*O. mykiss* life stages when PIT-tagged & detected",
+             x = "Month",
+             y = "Detections") +
+        scale_x_discrete(breaks = c("10/2022", "11/2022", "12/2022", "01/2023", 
+                                    "02/2023", "03/2023", "04/2023", "05/2023", 
+                                    "06/2023", "07/2023", "08/2023", "09/2023"),
+                         labels = c("10/22", "11/22", "12/22", "01/23", "02/23", 
+                                    "03/23", "04/23",  "05/23", "06/23", "07/23", 
+                                    "08/23", "09/23"),
+                         drop = F) +
+        scale_y_continuous(expand = expansion(mult = 0, add = 0), limits = y6) +
+        scale_fill_manual(values = c("#4DBBD5FF", "#3C5488FF", "white"),
+                          name = "Life stages",
+                          labels = c("parr", "smolt", "unknown"))
+      p6
+      
+      
         
 # plot life stages by sampling month for lagoon seines
     # select steelhead from Pescadero detections
@@ -758,10 +880,11 @@
     # show results
       # steelhead life stage by lagoon seine sampling month
         p7 <- ggplot(dat33, aes(x = SampMonth, fill = SampLifeStage), y = ID) + 
-           geom_bar(stat = "count", color = "black", show.legend = F) +
+           geom_bar(stat = "count", color = "black", show.legend = F, width = 0.3) +
            scale_fill_manual(values = c("#4DBBD5FF", "#8491B4FF")) +
+           mdthemes::md_theme_classic() +
            labs(title = "Lower Pescadero Creek Watershed",
-             subtitle = "Life stage when PIT-tagged vs. life stage when detected",
+             subtitle = "*O. mykiss* when tagged",
              x = "",
              y = "Seine captures") +
            ylim(0,30) +
@@ -769,12 +892,13 @@
         
       # detections for tagged steelhead
         p8 <- ggplot(dat33, aes(x = DetMonth, fill = DetLifeStage), y = ID) +
-          geom_bar(stat = "count", color = "black") +
+          geom_bar(stat = "count", color = "black", width = 0.5) +
           scale_fill_manual(values = c("white", "#4DBBD5FF", "#8491B4FF", "#3C5488FF"),
                             name = "Life stages",
                             labels = c("unknown", "parr", "smolt", "adult")) +
-          labs(title = "Pescadero Creek",
-               subtitle = "PIT tag detections at PC1 site",
+          mdthemes::md_theme_classic() +
+          labs(title = "Pescadero Creek - PC1 site",
+               subtitle = "*O. mykiss* when captured",
                x = "",
                y = "Detections") +
           ylim(0,30) +
@@ -785,7 +909,7 @@
           p9 <- ggarrange(p7,p8, ncol = 1, nrow = 2)
         # common title & axes title names
           annotate_figure(p9, 
-                        top = textGrob("O. mykiss life stages",
+                        top = textGrob("Observations by life stage",
                                        gp = gpar(cex = 2)),
                         bottom = textGrob("Sampling month", gp = gpar(cex = 1)))
 
