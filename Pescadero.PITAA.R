@@ -52,25 +52,28 @@
         
       # 3. change ID to show all digits rather than scientific notation
         dat$ID <- format(dat$ID, scientific = F)
+        
+      # 4. remove duplicate & uneccessary columns
+        dat2a <- dat[ , !names(dat) %in% c("DetectionID", "Fish.PITNum")]
        
     # e: only select the first & last detection by PIT #, antenna, & dat
-      dat2 <- dat %>% group_by(ID, Antenna, DetDate,  DetMonth, Species, SampDate, 
+        dat2b <- dat2a %>% group_by(ID, Antenna, DetDate,  DetMonth, Species, SampDate, 
                                FL, Origin, Reach, Site, Marked, LifeStage) %>% 
-          # group all other variables in dat by PIT #, antenna, & date
-        summarise(min(Time), max(Time))
-          # only select the 1st & last detections by the prior groupings (PIT #, antenna, date)
+                    # group all other variables in dat by PIT #, antenna, & date
+                  summarise(min(Time), max(Time))
+                    # only select the 1st & last detections by the prior groupings (PIT #, antenna, date)
     
     # f: clean data
       # 1. remove the last column
-        dat3 <- dat2[-c(14)]
+        dat2c <- dat2b[-c(14)]
           # duplicate time data is an artifact of selecting timestamps
       # 2. rename the last column
-        dat3 <- dat3 %>% rename("Time" = `min(Time)`)
+        dat2d <- dat2c %>% rename("Time" = `min(Time)`)
         # min(Time) was actually the detection time
       
     # g. remove physical test tags & those that are suspicious of
       # 1. flagged PIT tag numbers
-          dat4 <- dat3 %>%
+          dat3 <- dat2d %>%
           filter(!ID %in% c(982000365411489, 982000365411491, 982000365411625, 982000365411657, 982000365411680,
                               # 4 physical test tags 
                             900226001052951,  
@@ -80,22 +83,22 @@
           # Result: 25 rows removed from "dat3"
         
       # 2. PIT tag numbers ending in 5 zeroes
-        dat5 <- dat4 %>% filter(!str_detect(ID, "00000$"))
+        dat4 <- dat3 %>% filter(!str_detect(ID, "00000$"))
           # Result: nothing changed so these ghost tags were not found in the dataframe
     
   # Step 2: Prepare NOAA detections on Pescadero Creek for merging with other data
     
     # a: import data 
-      dat6 <- read_excel("NOAA-Pescadero&Butano.Detections.xlsx", 3)
-        # NOAA database records for Pescadero Creek detections of NOAA fish from 
+      dat5 <- read_excel("NOAA-Pescadero&Butano.Detections.xlsx", 3)
+        # NOAA database records for Pescadero Creek observations of NOAA fish from 
           # Oct. 2nd, 2017 to Jan. 25th, 2022
     
     # b: reformat & edit variables
       # b1. remove redundant PIT number columns so that one can be manipulated
-        dat7 <- dat6[,-c(1,2)]
+        dat6 <- dat5[,-c(1,2)]
         
       # b2. rename column headers to facilitate subsequent merging with other datasets
-        dat7 <- dat7 %>% 
+        dat7 <- dat6 %>% 
           rename("ID" = "PITNum", "Time" = "Timestamp", 
                  "Notes" = "NoteRecords", "DetDate" = "Date")
         
@@ -157,25 +160,25 @@
     # c: edit variables
         # 1. convert "Time" variable to time object in R
           # remove more unneded rows & columns
-            dat14 <- dat13[-1, # empty row
+            dat14a <- dat13[-1, # empty row
                          -8] # duplicate column
           # 2. edit column header since min(Time) is actually the detection time
-            dat14 <- dat14 %>% rename("Time" = `min(Time)`)
+            dat14b <- dat14 %>% rename("Time" = `min(Time)`)
         
           # 3. format Time variable
-            str(dat14$Time) # series of character strings
-            dat14$Time <- ymd_hms(dat14$Time) # convert to time data
-            str(dat14$Time) # worked!
+            str(dat14b$Time) # series of character strings
+            dat14b$Time <- ymd_hms(dat14b$Time) # convert to time data
+            str(dat14b$Time) # worked!
             
           # 4. reformat ID
             # change to numeric variable
-              dat14$ID <- as.numeric(dat14$ID)
+              dat14b$ID <- as.numeric(dat14b$ID)
             # show all digits
-              dat14$ID <- format(dat14$ID, scientific = F)
+              dat14b$ID <- format(dat14b$ID, scientific = F)
       
     # d: make a dataframe for Pescadero detections from NOAA data
         # 1: select data
-          dat15 <- dat14 %>% filter(Site %in% 
+          dat15 <- dat14b %>% filter(Site %in% 
                                 c("Pescadero_Upstream", "Pescadero_Downstream"))
         
         # 2: reformat variables for detection antenna in NOAA data
@@ -196,7 +199,7 @@
           # months to group detections by
             dat15$DetMonth <- format(dat15$Time, "%m/%Y", tz = "UTC")
         
-        # 6: check whether all 63 PIT numbers in dat11 are unique or repeats
+        # 6: check whether all 59 PIT numbers in dat11 are unique or repeats
           length(unique(dat15$ID)) # all are unique
         
   # Step 4 Join NOAA dataframes for its fish detected in Pescadero Creek
@@ -211,9 +214,8 @@
           # others have sparse data
   
   # Step 5: join CDFW dataframes with previously compiled NOAA dataframes
-        dat18 <- full_join(dat5, dat17, by = c("ID", "Time", "Site", "DetDate", "DetMonth"))
+        dat18 <- full_join(dat4, dat17, by = c("ID", "Time", "Site", "DetDate", "DetMonth"))
         
-
 # Import & compile Butano detections from NOAA, CDFW, & raw BioLogic --------------------------
     
       # Step 1: Prepare CalTrout detections for merging with other data - Giannini site
@@ -472,7 +474,8 @@
       # 1a.   
         dat18$ID %in% noaa.PISCES$ID
         Ps <- dplyr::inner_join(dat18, noaa.PISCES, by = "ID") 
-          # 46 PIT IDs from dat18 in PISCES
+          # 41 PIT IDs from dat18 in PISCES
+          # 165 PIT IDs from dat18 not in PISCES
         Ps2 <- Ps[ , !names(Ps) %in% c("Subsite", "TaggerID", "Mass_g", "X")]
         Pu <- dplyr::anti_join(dat18, noaa.PISCES, by = "ID")
           # 165 PIT IDs from dat18 not in PISCES
@@ -753,6 +756,15 @@
                          drop = F) +
         scale_y_continuous(expand = expansion(mult = 0, add = 0), limits = y5)
       p5
+  
+  # plot Coho Salmon detected in Pescadero Creek by life stage
+    # --------------------------------------------------------
+     
+    # select Coho Salmon detected in 2021 water year
+      P.onmy.21 <- P.21 %>% filter(Species == "Onmy")
+      
+    # plot data
+      
       
   # plot O. mykiss detected in Butano Creek by life stage
     # ---------------------------------------------------
@@ -776,10 +788,10 @@
                                     "Smolt", rep("Parr", 4), rep("Unknown", 3))
      
     # y-axis limit
-      y6 = c(0,40)
+      y7 = c(0,40)
       
     # plot data
-      p6 <- ggplot(B.onmy.22, aes(x = DetMonth, fill = SampLifestage), y = unique(ID)) +
+      p7 <- ggplot(B.onmy.22, aes(x = DetMonth, fill = SampLifestage), y = unique(ID)) +
         geom_bar(stat  = "count",
                  color = "black",
                  width = 0.5) +
@@ -801,13 +813,13 @@
         scale_fill_manual(values = c("#4DBBD5FF", "#3C5488FF", "white"),
                           name = "Life stages",
                           labels = c("parr", "smolt", "unknown"))
-      p6
+      p7
       
       
         
 # plot life stages by sampling month for lagoon seines
     # select steelhead from Pescadero detections
-      dat33 <- filter(dat5, Species == "onmy") 
+      dat33 <- filter(dat4, Species == "onmy") 
       
     # edit variables for visualization
       # order life stages for when salmonids were sampled
@@ -879,7 +891,7 @@
     
     # show results
       # steelhead life stage by lagoon seine sampling month
-        p7 <- ggplot(dat33, aes(x = SampMonth, fill = SampLifeStage), y = ID) + 
+        p8 <- ggplot(dat33, aes(x = SampMonth, fill = SampLifeStage), y = ID) + 
            geom_bar(stat = "count", color = "black", show.legend = F, width = 0.3) +
            scale_fill_manual(values = c("#4DBBD5FF", "#8491B4FF")) +
            mdthemes::md_theme_classic() +
@@ -891,7 +903,7 @@
           theme_classic()
         
       # detections for tagged steelhead
-        p8 <- ggplot(dat33, aes(x = DetMonth, fill = DetLifeStage), y = ID) +
+        p9 <- ggplot(dat33, aes(x = DetMonth, fill = DetLifeStage), y = ID) +
           geom_bar(stat = "count", color = "black", width = 0.5) +
           scale_fill_manual(values = c("white", "#4DBBD5FF", "#8491B4FF", "#3C5488FF"),
                             name = "Life stages",
@@ -906,9 +918,9 @@
           theme_classic()
       # combine plots
         # plot in one window
-          p9 <- ggarrange(p7,p8, ncol = 1, nrow = 2)
+          p10 <- ggarrange(p7,p8, ncol = 1, nrow = 2)
         # common title & axes title names
-          annotate_figure(p9, 
+          annotate_figure(p10, 
                         top = textGrob("Observations by life stage",
                                        gp = gpar(cex = 2)),
                         bottom = textGrob("Sampling month", gp = gpar(cex = 1)))
